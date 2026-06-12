@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDK THE NAME</title>
+    <meta name="description" content="A gentle, minimalist physics-based color restoration game. Stabilize and preserve architectural spaces using deliberate, smooth strokes.">
+    <!-- Google Fonts: Outfit for sleek geometric typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas" width="1024" height="640"></canvas>
+    <div id="toast">Message notification placeholder</div>
+
+    <div id="hud">
+        <div id="hud-left" class="hud-panel">
+            <div id="hud-level-title">Level Index</div>
+            <div id="hud-level-desc">Level Description Objective Requirement Specifications.</div>
+        </div>
+        <div id="hud-right" class="hud-panel">
+            <div class="metric-box">
+                <span class="metric-label">Window</span>
+                <span id="stat-timer" class="metric-value">3:00</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Coverage</span>
+                <span id="stat-coverage" class="metric-value">0%</span>
+            </div>
+            <div class="metric-box" id="stat-spill-container">
+                <span class="metric-label">Spillover</span>
+                <span id="stat-spillover" class="metric-value">0%</span>
+            </div>
+            <div class="metric-box" id="stat-resource-container">
+                <span class="metric-label">Paint</span>
+                <span id="stat-resource" class="metric-value">100%</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="palette-container">
+        <div id="palette"></div>
+    </div>
+
+   
+    <div id="home-screen" class="screen active">
+        <h1>IDK THE NAME</h1>
+        <p class="subtitle">Gentle structural preservation execution simulation game. Stabilize environmental aesthetic geometry using deliberate, smooth physical interaction strokes.</p>
+        <button id="start-btn" class="btn">START RESTORATION</button>
+    </div>
+
+  
+    <div id="success-screen" class="screen">
+        <h2 class="status-title">Surface Layer Restored</h2>
+        <p class="subtitle">The architectural field alignment specifications have successfully stabilized inside structural tolerances.</p>
+        <button id="next-btn" class="btn">ADVANCE TO NEXT SURFACE</button>
+    </div>
+
+    
+    <div id="fail-screen" class="screen">
+        <h2 id="fail-title" class="status-title">Precision Disrupted</h2>
+        <p id="fail-reason" class="status-desc">Parameters fell outside acceptable margins.</p>
+        <button id="retry-btn" class="btn">RESET LAYER PARAMETERS</button>
+    </div>
+
+    
+    <div id="completion-screen" class="screen">
+        <h1>Restoration Complete</h1>
+        <p class="subtitle">Magnificent. Balance, alignment harmony, and historical chromatics have been completely restored across the structural surfaces.</p>
+        <button id="restart-game-btn" class="btn">RESTART SIMULATION</button>
+    </div>
+</div>
+
+<script src="script.js"></script>
+<script src="controller.js"></script>
+</body>
+</html>
