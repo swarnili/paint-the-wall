@@ -20,6 +20,20 @@ let levelTimer = null;
 let timeRemaining = 0;
 let lastSpiderSoundTime = 0;
 
+// Upgraded Rehab & Setting configurations
+let activeBrushRadius = 26;          // Default brush size
+let activeToleranceLimit = 40;       // Default spill limit percentage
+let activeTimerMode = 'calm';        // Default: calm (no timer)
+let brush = { worldX: 512, worldY: 320 }; // Virtual steering brush coordinates
+
+// Session telemetry logs
+let sessionStartTime = 0;
+let sessionTotalTime = 0;
+let sessionPaintTicks = 0;
+let sessionSpillTicks = 0;
+let sessionStrokeSpeeds = [];
+let sessionStabilityDeviations = [];
+
 // Web Audio API Sound Controller
 const AudioController = {
     ctx: null,
@@ -452,6 +466,34 @@ function init() {
     window.addEventListener('resize', resizeGame);
     resizeGame();
 
+    // Pause screen buttons
+    document.getElementById('pause-resume-btn').addEventListener('click', () => {
+        AudioController.playClick();
+        resumeGame();
+    });
+    document.getElementById('pause-restart-btn').addEventListener('click', () => {
+        AudioController.playClick();
+        resumeGame();
+        resetLevel(currentLevelIndex);
+    });
+    document.getElementById('pause-quit-btn').addEventListener('click', () => {
+        AudioController.playClick();
+        if (levelTimer) { clearInterval(levelTimer); }
+        switchScreen('home-screen');
+        gameState = 'HOME';
+        currentLevelIndex = 0;
+        camera.targetScale = 0.5;
+        camera.targetX = 512;
+        camera.targetY = 320;
+    });
+
+    // Summary screen buttons
+    document.getElementById('export-report-btn').addEventListener('click', () => {
+        AudioController.playClick();
+        exportSessionCSV();
+    });
+
+    // Core Game flow button triggers
     document.getElementById('start-btn').addEventListener('click', () => {
         AudioController.playClick();
         startCinematicSequence();
@@ -483,12 +525,29 @@ function init() {
 }
 
 function startCinematicSequence() {
+    // Capture settings
+    activeBrushRadius = parseInt(document.getElementById('setting-brush-size').value);
+    activeToleranceLimit = parseInt(document.getElementById('setting-tolerance').value);
+    activeTimerMode = document.getElementById('setting-timer').value;
+
+    // Reset session metrics
+    sessionStartTime = Date.now();
+    sessionTotalTime = 0;
+    sessionPaintTicks = 0;
+    sessionSpillTicks = 0;
+    sessionStrokeSpeeds = [];
+    sessionStabilityDeviations = [];
+    
+    // Set initial virtual brush coordinates to center
+    brush.worldX = 512;
+    brush.worldY = 320;
+
     switchScreen(null);
     gameState = 'CINEMATIC';
     camera.targetScale = 0.85;
     camera.targetX = 512;
     camera.targetY = 320;
-    showToast("Observe the space. Gentle control restores harmony.", 3200);
+    showToast("Observe the space. Controlled stability restores harmony.", 3200);
     setTimeout(() => { enterLevel(0); }, 3500);
 }
 
@@ -504,6 +563,16 @@ function enterLevel(idx) {
     camera.targetScale = 1.4;
     camera.targetX = targetCX;
     camera.targetY = targetCY;
+
+    // Center the steering brush on the target to prevent sudden boundary spillover checks
+    brush.worldX = targetCX;
+    brush.worldY = targetCY;
+    mouse.worldX = targetCX;
+    mouse.worldY = targetCY;
+    mouse.lastWorldX = targetCX;
+    mouse.lastWorldY = targetCY;
+    mouse.vx = 0;
+    mouse.vy = 0;
 
     document.getElementById('hud-level-title').innerText = `Level ${surface.id}: ${surface.name}`;
     document.getElementById('hud-level-desc').innerText = surface.desc;
@@ -550,6 +619,10 @@ function buildPaletteUI(surface) {
 
 function setupTimer(surface) {
     if(levelTimer) { clearInterval(levelTimer); }
+    if (activeTimerMode === 'calm') {
+        document.getElementById('stat-timer').innerText = "CALM";
+        return;
+    }
     timeRemaining = (surface.type === 'master') ? 90 : 180;
     updateTimerUI();
     levelTimer = setInterval(() => {
@@ -592,36 +665,68 @@ function processPaintingStroke(surface) {
         tremorOffset.y = 0;
     }
 
-    let unscaledX = mouse.canvasX - canvas.width / 2;
-    let unscaledY = mouse.canvasY - canvas.height / 2;
-    mouse.worldX = unscaledX / camera.scale + camera.x + tremorOffset.x;
-    mouse.worldY = unscaledY / camera.scale + camera.y + tremorOffset.y;
+    if (InputHandler.settings.inputMode === 'velocity') {
+        // Velocity-based steering (Rehab BLE / Keyboard)
+        const speed = 3.0;
+        brush.worldX += InputHandler.state.x * speed;
+        brush.worldY += InputHandler.state.y * speed;
+
+        // Clamp inside canvas boundary
+        brush.worldX = Math.max(0, Math.min(1024, brush.worldX));
+        brush.worldY = Math.max(0, Math.min(640, brush.worldY));
+
+        mouse.worldX = brush.worldX + tremorOffset.x;
+        mouse.worldY = brush.worldY + tremorOffset.y;
+    } else {
+        // Absolute Pointer mode (Mouse/Touch)
+        let unscaledX = mouse.canvasX - canvas.width / 2;
+        let unscaledY = mouse.canvasY - canvas.height / 2;
+        brush.worldX = unscaledX / camera.scale + camera.x;
+        brush.worldY = unscaledY / camera.scale + camera.y;
+
+        mouse.worldX = brush.worldX + tremorOffset.x;
+        mouse.worldY = brush.worldY + tremorOffset.y;
+    }
 
     mouse.vx = mouse.worldX - mouse.lastWorldX;
     mouse.vy = mouse.worldY - mouse.lastWorldY;
     mouse.lastWorldX = mouse.worldX;
     mouse.lastWorldY = mouse.worldY;
 
-    if (!mouse.isDown) { return; }
-    if (mouse.canvasY > 540) { return; }
+    // Check if painting is active
+    const isPainting = (InputHandler.settings.inputMode === 'velocity') ? true : mouse.isDown;
+    if (!isPainting) { return; }
+    if (InputHandler.settings.inputMode !== 'velocity' && mouse.canvasY > 540) { return; }
     if (surface.type === 'master' && surface.paintResource <= 0) { return; }
 
+    // Session logs: increment active paint ticks
+    sessionPaintTicks++;
+
+    // Track velocities and tremor deviations for telemetry
+    const velocity = Math.hypot(mouse.vx, mouse.vy);
+    sessionStrokeSpeeds.push(velocity);
+    if (InputHandler.state.connected) {
+        const rawDelta = Math.hypot(InputHandler.state.rawX - InputHandler.state.x, InputHandler.state.rawY - InputHandler.state.y);
+        sessionStabilityDeviations.push(rawDelta);
+    }
+
     // Play subtle swooshing audio feedback
-    if (Math.hypot(mouse.vx, mouse.vy) > 1.5) {
+    if (velocity > 1.5) {
         AudioController.playPaintSwoosh();
     }
 
     let activeColor = GLOBAL_COLORS[activeColorIndex];
-    let brushRadius = 22;
+    let brushRadius = activeBrushRadius;
     let ptWorld = { x: mouse.worldX, y: mouse.worldY };
     let isInsideSurface = isPointInPoly(ptWorld, surface.poly);
 
     if (!isInsideSurface) {
+        sessionSpillTicks++;
         surface.totalSpillStrikes += 1.8;
         surface.spilloverPct = (surface.totalSpillStrikes / 200) * 100;
         updateHUDMetrics(surface);
-        if (surface.spilloverPct >= 40) {
-            triggerFailure("Boundary Precision Limit", "Spillover crossed the strict 40% margin threshold.");
+        if (surface.spilloverPct >= activeToleranceLimit) {
+            triggerFailure("Boundary Precision Limit", `Spillover crossed the strict ${activeToleranceLimit}% margin threshold.`);
         }
         return;
     }
@@ -635,11 +740,12 @@ function processPaintingStroke(surface) {
     if (surface.type === 'complex') {
         let hitObstacle = surface.obstacles.some(obs => Math.hypot(mouse.worldX - obs.cx, mouse.worldY - obs.cy) < (obs.r + brushRadius * 0.3));
         if (hitObstacle) {
+            sessionSpillTicks += 2; // heavier penalty
             surface.totalSpillStrikes += 4.5;
             surface.spilloverPct = (surface.totalSpillStrikes / 200) * 100;
             updateHUDMetrics(surface);
-            if (surface.spilloverPct >= 40) {
-                triggerFailure("Structural Interference Strike", "The hanging cables touched the active paint line boundary.");
+            if (surface.spilloverPct >= activeToleranceLimit) {
+                triggerFailure("Structural Interference Strike", `The hanging cables touched the active paint line boundary.`);
             }
             return;
         }
@@ -845,8 +951,7 @@ function triggerLevelSuccess() {
     camera.targetY = 320;
     setTimeout(() => {
         if (currentLevelIndex === ROOM_SURFACES.length - 1) {
-            switchScreen('completion-screen');
-            gameState = 'FINAL_SCREEN';
+            showSessionSummary();
         } else {
             switchScreen('success-screen');
             gameState = 'SUCCESS_SCREEN';
@@ -879,6 +984,99 @@ function resetLevel(idx) {
     mapTargetAnalysis(surface);
     switchScreen(null);
     enterLevel(idx);
+}
+
+// ─── REHAB CLINICAL TELEMETRY & CONTROLS ─────────────────────────────────────
+
+function showSessionSummary() {
+    // 1. Calculate active session time
+    let durationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+    sessionTotalTime = durationSec;
+    let mins = Math.floor(durationSec / 60);
+    let secs = durationSec % 60;
+    document.getElementById('summary-time').innerText = `${mins}m ${secs}s`;
+
+    // 2. Calculate accuracy (in-bounds ticks vs total ticks)
+    let accuracy = 100;
+    if (sessionPaintTicks > 0) {
+        accuracy = Math.max(0, Math.min(100, Math.floor(((sessionPaintTicks - sessionSpillTicks) / sessionPaintTicks) * 100)));
+    }
+    document.getElementById('summary-accuracy').innerText = `${accuracy}%`;
+
+    // 3. Calculate average pacing (stroke speed, scaled for readability)
+    let avgSpeed = 0;
+    if (sessionStrokeSpeeds.length > 0) {
+        let sum = sessionStrokeSpeeds.reduce((a, b) => a + b, 0);
+        avgSpeed = Math.floor((sum / sessionStrokeSpeeds.length) * 60); // px/second approx
+    }
+    document.getElementById('summary-speed').innerText = `${avgSpeed} px/s`;
+
+    // 4. Calculate stability score
+    let stability = 100;
+    if (sessionStabilityDeviations.length > 0) {
+        let avgDev = sessionStabilityDeviations.reduce((a, b) => a + b, 0) / sessionStabilityDeviations.length;
+        // Map average deviation to 0-100 stability score (lower deviation = higher stability)
+        stability = Math.max(20, Math.min(100, Math.floor(100 - (avgDev * 150))));
+    }
+    document.getElementById('summary-stability').innerText = `${stability}%`;
+    
+    // Switch to completion screen
+    switchScreen('completion-screen');
+    gameState = 'FINAL_SCREEN';
+}
+
+function exportSessionCSV() {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "ChromaFlow Rehab - Patient Session Report\n";
+    csvContent += `Date,${new Date().toLocaleDateString()}\n`;
+    csvContent += `Time,${new Date().toLocaleTimeString()}\n`;
+    csvContent += `Total Duration,${Math.floor(sessionTotalTime / 60)}m ${sessionTotalTime % 60}s\n`;
+    
+    let accuracy = 100;
+    if (sessionPaintTicks > 0) {
+        accuracy = Math.max(0, Math.min(100, Math.floor(((sessionPaintTicks - sessionSpillTicks) / sessionPaintTicks) * 100)));
+    }
+    csvContent += `Overall Boundary Accuracy,${accuracy}%\n`;
+    
+    let avgSpeed = 0;
+    if (sessionStrokeSpeeds.length > 0) {
+        avgSpeed = Math.floor((sessionStrokeSpeeds.reduce((a, b) => a + b, 0) / sessionStrokeSpeeds.length) * 60);
+    }
+    csvContent += `Average Pacing Speed,${avgSpeed} px/s\n`;
+    
+    let stability = 100;
+    if (sessionStabilityDeviations.length > 0) {
+        let avgDev = sessionStabilityDeviations.reduce((a, b) => a + b, 0) / sessionStabilityDeviations.length;
+        stability = Math.max(20, Math.min(100, Math.floor(100 - (avgDev * 150))));
+    }
+    csvContent += `Patient Stability Index,${stability}%\n\n`;
+    
+    csvContent += "Level Metrics Breakdown:\n";
+    csvContent += "Level ID,Level Name,Completed Status\n";
+    ROOM_SURFACES.forEach((s) => {
+        csvContent += `${s.id},"${s.name}",${s.coveragePct.toFixed(1)}% Coverage (Spillover: ${s.spilloverPct.toFixed(1)}%)\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `ChromaFlow_Rehab_Report_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function pauseGame() {
+    if (gameState !== 'PLAYING') return;
+    gameState = 'PAUSED';
+    switchScreen('pause-screen');
+    showToast("Session Paused", 1500);
+}
+
+function resumeGame() {
+    if (gameState !== 'PAUSED') return;
+    gameState = 'PLAYING';
+    switchScreen(null); // hides screen overlay
 }
 
 function advanceSequence() {
@@ -925,6 +1123,52 @@ function showToast(msg, duration = 2000) {
 function tick() {
     camera.update();
 
+    // 1. Update calibration visualizer dot when on home screen
+    if (gameState === 'HOME') {
+        const dot = document.getElementById('cal-cursor-dot');
+        if (dot) {
+            // Piecewise linear calibration mapping to preserve full [-1, 1] range of motion
+            let calibX = 0;
+            const offX = Math.max(-0.9, Math.min(0.9, InputHandler.state.offsetX));
+            const rawX = InputHandler.state.rawX;
+            if (rawX >= offX) {
+                calibX = (1.0 - offX) !== 0 ? (rawX - offX) / (1.0 - offX) : 0;
+            } else {
+                calibX = (offX + 1.0) !== 0 ? (rawX - offX) / (offX + 1.0) : 0;
+            }
+
+            let calibY = 0;
+            const offY = Math.max(-0.9, Math.min(0.9, InputHandler.state.offsetY));
+            const rawY = InputHandler.state.rawY;
+            if (rawY >= offY) {
+                calibY = (1.0 - offY) !== 0 ? (rawY - offY) / (1.0 - offY) : 0;
+            } else {
+                calibY = (offY + 1.0) !== 0 ? (rawY - offY) / (offY + 1.0) : 0;
+            }
+
+            // Apply active inversions to match physical tilt direction
+            if (InputHandler.settings.invertX) calibX = -calibX;
+            if (InputHandler.settings.invertY) calibY = -calibY;
+
+            const clampedX = Math.max(-1.0, Math.min(1.0, calibX));
+            const clampedY = Math.max(-1.0, Math.min(1.0, calibY));
+            
+            // Map raw values to visualizer coordinate grid (110x110 center is 55, radius offset is 45)
+            const leftPos = 55 + clampedX * 45;
+            const topPos = 55 + clampedY * 45;
+            
+            dot.style.left = `${leftPos}px`;
+            dot.style.top = `${topPos}px`;
+        }
+    }
+
+    // 2. Pause trigger checking
+    if (gameState === 'PLAYING' && InputHandler.state.btnC) {
+        InputHandler.state.btnC = false; // Reset trigger flag
+        pauseGame();
+    }
+
+    // 3. Obstacles movement updates
     if (gameState === 'PLAYING' && currentLevelIndex === 3) {
         let surface4 = ROOM_SURFACES[3];
         let timeFactor = Date.now() * 0.0024;
@@ -936,10 +1180,12 @@ function tick() {
         updateSpider(ROOM_SURFACES[4]);
     }
 
-    render();
-    if(gameState === 'PLAYING') {
+    // 4. Paint then Render to eliminate lag
+    if (gameState === 'PLAYING') {
         processPaintingStroke(ROOM_SURFACES[currentLevelIndex]);
     }
+    render();
+    
     requestAnimationFrame(tick);
 }
 

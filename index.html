@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IDK THE NAME</title>
-    <meta name="description" content="A gentle, minimalist physics-based color restoration game. Stabilize and preserve architectural spaces using deliberate, smooth strokes.">
+    <title>ChromaFlow Rehab - Wall Painting Rehabilitation</title>
+    <meta name="description" content="A clinical-grade, physics-based wall painting game for physical rehabilitation and motor training.">
     <!-- Google Fonts: Outfit for sleek geometric typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,6 +17,7 @@
     <canvas id="gameCanvas" width="1024" height="640"></canvas>
     <div id="toast">Message notification placeholder</div>
 
+    <!-- Heads-Up Display (HUD) -->
     <div id="hud">
         <div id="hud-left" class="hud-panel">
             <div id="hud-level-title">Level Index</div>
@@ -42,40 +43,160 @@
         </div>
     </div>
 
+    <!-- Active Color Palette -->
     <div id="palette-container">
         <div id="palette"></div>
     </div>
 
-   
+    <!-- 1. Home / Settings & Calibration Screen -->
     <div id="home-screen" class="screen active">
-        <h1>IDK THE NAME</h1>
-        <p class="subtitle">Gentle structural preservation execution simulation game. Stabilize environmental aesthetic geometry using deliberate, smooth physical interaction strokes.</p>
-        <button id="start-btn" class="btn">START RESTORATION</button>
+        <div class="header-section">
+            <h1 class="glow-title">CHROMAFLOW REHAB</h1>
+            <p class="subtitle">Motor coordination and joint stabilization therapy. Calibrate your motion controller and customize exercises below.</p>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Left Panel: Exercise Settings -->
+            <div class="dash-card">
+                <h3><span class="step-num">1</span> Rehabilitation Options</h3>
+                
+                <div class="setting-item">
+                    <label for="setting-brush-size">Brush Size (ROM Scale)</label>
+                    <select id="setting-brush-size" class="select-btn">
+                        <option value="10">Fine Detail (10px - Hardest)</option>
+                        <option value="18">Precision (18px - Hard)</option>
+                        <option value="26" selected>Standard (26px - Medium)</option>
+                        <option value="36">Broad Coverage (36px - Easy)</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="setting-tolerance">Spillover Tolerance</label>
+                    <select id="setting-tolerance" class="select-btn">
+                        <option value="20">Strict (20% Limit - High Precision)</option>
+                        <option value="40" selected>Moderate (40% Limit - Standard)</option>
+                        <option value="60">Relaxed (60% Limit - Adaptive)</option>
+                    </select>
+                </div>
+
+                <div class="setting-item">
+                    <label for="setting-timer">Timer Mode</label>
+                    <select id="setting-timer" class="select-btn">
+                        <option value="calm" selected>Calm Mode (No Timer)</option>
+                        <option value="challenge">Challenge Mode (Time Windows Active)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Right Panel: Labyrinth Controller BLE Integration -->
+            <div class="dash-card">
+                <h3><span class="step-num">2</span> Labyrinth Controller (BLE)</h3>
+                
+                <div class="conn-status-bar">
+                    <button id="ble-connect-btn" class="btn btn-secondary">Connect Controller</button>
+                    <div class="status-indicator">
+                        <span id="status-glow" class="glow-dot disconnected"></span>
+                        <span id="status-text">Disconnected</span>
+                    </div>
+                </div>
+
+                <div class="calibration-section">
+                    <!-- Live Crosshair Visualizer for Accel Roll/Pitch -->
+                    <div class="cal-visualizer">
+                        <div class="grid-crosshair vertical"></div>
+                        <div class="grid-crosshair horizontal"></div>
+                        <div id="cal-target-circle"></div>
+                        <div id="cal-cursor-dot"></div>
+                    </div>
+                    
+                    <div class="cal-controls">
+                        <button id="ble-calibrate-btn" class="btn btn-small" disabled>Calibrate Flat</button>
+                        <div class="toggle-group">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="toggle-invert-x" checked>
+                                <span class="slider"></span> Invert Left/Right
+                            </label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="toggle-invert-y">
+                                <span class="slider"></span> Invert Up/Down
+                            </label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="toggle-tremor" checked>
+                                <span class="slider"></span> Tremor Smoothing
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-item sensitivity-slider-container">
+                    <label for="setting-sensitivity">Controller Sensitivity: <span id="sens-val">1.0</span>x</label>
+                    <input type="range" id="setting-sensitivity" min="0.2" max="2.0" step="0.1" value="1.0" class="range-slider">
+                </div>
+            </div>
+        </div>
+
+        <button id="start-btn" class="btn btn-main">START EXERCISE</button>
     </div>
 
-  
+    <!-- 2. Success Interstitial Screen -->
     <div id="success-screen" class="screen">
         <h2 class="status-title">Surface Layer Restored</h2>
         <p class="subtitle">The architectural field alignment specifications have successfully stabilized inside structural tolerances.</p>
         <button id="next-btn" class="btn">ADVANCE TO NEXT SURFACE</button>
     </div>
 
-    
+    <!-- 3. Failure Interstitial Screen -->
     <div id="fail-screen" class="screen">
         <h2 id="fail-title" class="status-title">Precision Disrupted</h2>
         <p id="fail-reason" class="status-desc">Parameters fell outside acceptable margins.</p>
         <button id="retry-btn" class="btn">RESET LAYER PARAMETERS</button>
     </div>
 
-    
+    <!-- 4. Pause Screen Overlay -->
+    <div id="pause-screen" class="screen">
+        <h2 class="status-title">Session Paused</h2>
+        <p class="subtitle">Take a brief rest to recover muscle fatigue, then resume when ready.</p>
+        <div class="button-row">
+            <button id="pause-resume-btn" class="btn">Resume Exercise</button>
+            <button id="pause-restart-btn" class="btn btn-secondary">Restart Level</button>
+            <button id="pause-quit-btn" class="btn btn-danger">Exit to Menu</button>
+        </div>
+    </div>
+
+    <!-- 5. Completion Screen (Therapeutic Session Summary Dashboard) -->
     <div id="completion-screen" class="screen">
-        <h1>Restoration Complete</h1>
-        <p class="subtitle">Magnificent. Balance, alignment harmony, and historical chromatics have been completely restored across the structural surfaces.</p>
-        <button id="restart-game-btn" class="btn">RESTART SIMULATION</button>
+        <h1 class="glow-title">Session Complete</h1>
+        <p class="subtitle">Outstanding rehabilitation progress. Harmony has been successfully restored across all surfaces.</p>
+        
+        <!-- Clinical Analytics Dashboard -->
+        <div class="summary-dashboard">
+            <div class="summary-card">
+                <span class="summary-label">Active Duration</span>
+                <span id="summary-time" class="summary-value">0m 0s</span>
+            </div>
+            <div class="summary-card">
+                <span class="summary-label">Boundary Accuracy</span>
+                <span id="summary-accuracy" class="summary-value">0%</span>
+            </div>
+            <div class="summary-card">
+                <span class="summary-label">Average Pacing</span>
+                <span id="summary-speed" class="summary-value">0 px/s</span>
+            </div>
+            <div class="summary-card">
+                <span class="summary-label">Stability Score</span>
+                <span id="summary-stability" class="summary-value">0%</span>
+            </div>
+        </div>
+
+        <div class="button-row">
+            <button id="export-report-btn" class="btn btn-main">Export Therapist Report (CSV)</button>
+            <button id="restart-game-btn" class="btn btn-secondary">Restart Session</button>
+        </div>
     </div>
 </div>
 
-<script src="script.js"></script>
+<script src="input_handler.js"></script>
 <script src="controller.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
